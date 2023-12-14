@@ -137,8 +137,8 @@ function App() {
           devAddress:
             "tb1p9w5uzcx8nnysa763syhsmmdqkvxavdnywrstcgah35lsdeq5305qwwmfnn",
           devFee: 1000,
-          brc20Ticker: "pktt",
-          brc20Amount: "2000",
+          brc20Ticker: "pktd",
+          brc20Amount: "200",
           count: 1,
         },
         {
