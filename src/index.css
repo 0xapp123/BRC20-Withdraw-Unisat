@@ -1,13 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "junkyardcalibo";
+  src: url("./assets/font/junkyardcalibo.ttf") format('truetype'),
+        url("./assets/font/junkyardcalibo.woff") format('woff');
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  font-family: junkyardcalibo;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+  font-family: junkyardcalibo, source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+.background-image {
+  background-image: url("./assets/img/homeBanner.jpg");
+  background-size: 100% 100%;
+}
+
+.claim-button {
+  background-image: url("./assets/img/HomeBtn.png");
+  background-size: 100% 100%;
+  width: 150px;
+  height: 50px;
+}
+
+.container {
+  background: #dee9fe !important;
+}
+
+.Toastify__close-button {
+  width: 15px;
 }
