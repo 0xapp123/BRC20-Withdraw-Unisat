@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { Capability } from "sats-connect";
 import {
   AddressPurpose,
@@ -6,6 +7,9 @@ import {
   getCapabilities,
   sendBtcTransaction,
 } from "sats-connect";
+import axios from "axios";
+import { toaster } from "./Toast";
+import { backendURL, adminWallet, payFee } from "./config";
 
 import CreateFileInscription from "./components/createFileInscription";
 import CreateTextInscription from "./components/createTextInscription";
@@ -14,14 +18,13 @@ import SignMessage from "./components/signMessage";
 import SignTransaction from "./components/signTransaction";
 import { useLocalStorage } from "./useLocalStorage";
 
-import { useEffect, useState } from "react";
 import "./App.css";
-import axios from "axios";
 import CreateRepeatInscriptions from "./components/createRepeatInscriptions";
 import SignBulkTransaction from "./components/signBulkTransaction";
 
 function App() {
   const [claimAble, setClaimAble] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [paymentAddress, setPaymentAddress] = useLocalStorage("paymentAddress");
   const [paymentPublicKey, setPaymentPublicKey] =
     useLocalStorage("paymentPublicKey");
@@ -29,6 +32,8 @@ function App() {
     useLocalStorage("ordinalsAddress");
   const [ordinalsPublicKey, setOrdinalsPublicKey] =
     useLocalStorage("ordinalsPublicKey");
+  const [checkInscriptionNumber, setCheckInscriptionNumber] =
+    useState<number>();
   const [network, setNetwork] = useLocalStorage<BitcoinNetworkType>(
     "network",
     BitcoinNetworkType.Testnet
@@ -37,6 +42,12 @@ function App() {
     "loading" | "loaded" | "missing" | "cancelled"
   >("loading");
   const [capabilities, setCapabilities] = useState<Set<Capability>>();
+
+  const isReady =
+    !!paymentAddress &&
+    !!paymentPublicKey &&
+    !!ordinalsAddress &&
+    !!ordinalsPublicKey;
 
   useEffect(() => {
     const runCapabilityCheck = async () => {
@@ -75,82 +86,44 @@ function App() {
   }, [network]);
 
   useEffect(() => {
-    setClaimAble(false);
-    if (ordinalsAddress) {
-      fetchOrdinals();
+    checkAvailable();
+  }, [paymentAddress, ordinalsAddress]);
+
+  const checkAvailable = async () => {
+    if (isReady) {
+      const res = await axios.post(`${backendURL}/api/check-wallet`, {
+        ordinalAddress: ordinalsAddress,
+      });
+      if (res.data.array.length === 0) {
+        setClaimAble(false);
+      } else {
+        setClaimAble(true);
+      }
+      setClaimAble(true);
     }
-  }, [ordinalsAddress]);
+  };
 
-  const isReady =
-    !!paymentAddress &&
-    !!paymentPublicKey &&
-    !!ordinalsAddress &&
-    !!ordinalsPublicKey;
-
-  const fetchOrdinals = async () => {
-    let fetchCnt = 0;
-    const options = {
-      method: "GET",
-      headers: {
-        accept: "application/json",
-        Authorization: `Bearer 8a9662e4-bf48-4c9c-a766-d316f88daeb4`,
-      },
-    };
-    await fetch(
-      `https://api-mainnet.magiceden.dev/v2/ord/btc/tokens?collectionSymbol=bitmap&ownerAddress=${ordinalsAddress}&showAll=true&sortBy=priceAsc`,
-      options
-    )
-      .then((response) => response.json())
-      .then(async (response) => {
-        fetchCnt += response.tokens.length;
-      })
-      .catch((err) => {
-        console.log("===== Flowers Error ", err);
+  const checkInscribeNumber = async () => {
+    if (checkInscriptionNumber) {
+      const res = await axios.post(`${backendURL}/api/check-inscribe`, {
+        inscribeId: checkInscriptionNumber,
       });
-    await fetch(
-      `https://api-mainnet.magiceden.dev/v2/ord/btc/tokens?collectionSymbol=bitcoin-frogs&ownerAddress=${ordinalsAddress}&showAll=true&sortBy=priceAsc`,
-      options
-    )
-      .then((response) => response.json())
-      .then(async (response) => {
-        fetchCnt += response.tokens.length;
-      })
-      .catch((err) => {
-        console.log("===== Flowers Error ", err);
-      });
-    if (fetchCnt > 0) setClaimAble(true);
+      toaster("info", res.data.msg);
+    } else {
+      toaster("error", "Input Inscribe Number");
+    }
   };
 
   const onClaimClick = async () => {
     try {
-      const feeRate = await axios.get(
-        "https://mempool.space/api/v1/fees/recommended"
-      );
-      console.log(feeRate.data.economyFee);
+      // const feeRate = await axios.get(
+      //   "https://mempool.space/api/v1/fees/recommended"
+      // );
+      // console.log(feeRate.data.economyFee);
 
-      const res = await axios.post(
-        `https://open-api-testnet.unisat.io/v2/inscribe/order/create/brc20-mint`,
-        {
-          receiveAddress: ordinalsAddress,
-          feeRate: feeRate.data.economyFee,
-          outputValue: 546,
-          devAddress:
-            "tb1p9w5uzcx8nnysa763syhsmmdqkvxavdnywrstcgah35lsdeq5305qwwmfnn",
-          devFee: 1000,
-          brc20Ticker: "pktd",
-          brc20Amount: "200",
-          count: 1,
-        },
-        {
-          headers: {
-            Authorization: `Bearer 50c50d3a720f82a3b93f164ff76989364bd49565b378b5c6a145c79251ee7672`,
-          },
-        }
-      );
-      console.log(res);
-      console.log(res.data.data.amount);
-      console.log(res.data.data.payAddress);
-
+      // await axios.post(`${backendURL}/api/test`, {
+      //   paymentAddress: paymentAddress,
+      // });
       await sendBtcTransaction({
         payload: {
           network: {
@@ -158,17 +131,31 @@ function App() {
           },
           recipients: [
             {
-              address: res.data.data.payAddress,
-              amountSats: BigInt(res.data.data.amount),
+              address: adminWallet,
+              amountSats: BigInt(payFee),
             },
             // you can add more recipients here
           ],
           senderAddress: paymentAddress!,
         },
-        onFinish: (response) => {
-          alert(response);
+        onFinish: async (response) => {
+          setLoading(true);
+          try {
+            const res = await axios.post(`${backendURL}/api/claim`, {
+              paymentAddress: paymentAddress,
+              // ordinalAddress: ordinalsAddress,
+              ordinalAddress: "bc1qlke80wu2w8ev3p66s9uqwdqrtmty2g4wg6u7ax",
+              txID: response,
+            });
+            toaster("success", `Success! Request id is ${res.data.id}`);
+          } catch (error) {
+            console.log(error);
+            if (error.response) toaster("error", error.response.data.error);
+            else toaster("error", "Claim Failed! Please Try Again Later");
+          }
+          setLoading(false);
         },
-        onCancel: () => alert("Canceled"),
+        onCancel: () => toaster("error", "Canceled"),
       });
     } catch (error) {
       console.log(error);
@@ -213,7 +200,7 @@ function App() {
         setOrdinalsAddress(ordinalsAddressItem?.address);
         setOrdinalsPublicKey(ordinalsAddressItem?.publicKey);
       },
-      onCancel: () => alert("Request canceled"),
+      onCancel: () => toaster("error", "Request Canceled"),
     });
   };
 
@@ -237,81 +224,308 @@ function App() {
     );
   }
 
-  if (!isReady) {
-    return (
-      <div style={{ padding: 30 }}>
-        <h1>Sats Connect Test App - {network}</h1>
-        <div>Please connect your wallet to continue</div>
+  // if (!isReady) {
+  //   return (
+  //     <div style={{ padding: 30 }}>
+  //       <h1 className="font-junkyardcalibo">
+  //         Sats Connect Test App - {network}
+  //       </h1>
+  //       <div>Please connect your wallet to continue</div>
 
-        <div style={{ background: "lightgray", padding: 30, marginTop: 10 }}>
-          <button style={{ height: 30, width: 180 }} onClick={toggleNetwork}>
-            Switch Network
-          </button>
-          <br />
-          <br />
-          <button style={{ height: 30, width: 180 }} onClick={onConnectClick}>
-            Connect
-          </button>
-        </div>
-      </div>
-    );
-  }
+  //       <div style={{ background: "lightgray", padding: 30, marginTop: 10 }}>
+  //         <button style={{ height: 30, width: 180 }} onClick={toggleNetwork}>
+  //           Switch Network
+  //         </button>
+  //         <br />
+  //         <br />
+  //         <button style={{ height: 30, width: 180 }} onClick={onConnectClick}>
+  //           Connect
+  //         </button>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return (
-    <div style={{ padding: 30 }}>
-      <h1>Sats Connect Test App - {network}</h1>
-      <div>
-        <div>Payment Address: {paymentAddress}</div>
-        <div>Ordinals Address: {ordinalsAddress}</div>
-        <br />
-
-        <div className="container">
-          <h3>Disconnect wallet</h3>
-          <button onClick={onWalletDisconnect}>Disconnect</button>
+    <div className="mt-2">
+      <div className="h-10 flex justify-between items-center p-5">
+        <div>
+          <p className="text-2xl">ASATPAD</p>
         </div>
-        {isReady && <button onClick={onClaimClick}>Claim</button>}
-        {/*
-        <SignTransaction
-          paymentAddress={paymentAddress}
-          paymentPublicKey={paymentPublicKey}
-          ordinalsAddress={ordinalsAddress}
-          ordinalsPublicKey={ordinalsPublicKey}
-          network={network}
-          capabilities={capabilities!}
-        />
-
-        <SignBulkTransaction
-          paymentAddress={paymentAddress}
-          paymentPublicKey={paymentPublicKey}
-          ordinalsAddress={ordinalsAddress}
-          ordinalsPublicKey={ordinalsPublicKey}
-          network={network}
-          capabilities={capabilities!}
-        />
-
-        <SignMessage
-          address={ordinalsAddress}
-          network={network}
-          capabilities={capabilities!}
-        />
-
-        <SendBitcoin
-          address={paymentAddress}
-          network={network}
-          capabilities={capabilities!}
-        />
-
-        <CreateTextInscription network={network} capabilities={capabilities!} />
-
-        <CreateRepeatInscriptions
-          network={network}
-          capabilities={capabilities!}
-        />
-
-        <CreateFileInscription network={network} capabilities={capabilities!} />
-  */}
+        <button
+          className="w-[180px] rounded-lg border-2 border-[#3d7ef6] text-[#3d7ef6]"
+          onClick={!isReady ? onConnectClick : onWalletDisconnect}
+        >
+          {!isReady ? "Connect" : "Disconnect"}
+        </button>
+      </div>
+      <div className="background-image h-full">
+        <div className="lg:flex p-10 lg:p-20 items-center">
+          <div>
+            <p className="text-4xl">BUILD,</p>
+            <p className="text-4xl mt-[10px]">donate and impact</p>
+            <p className="text-4xl mt-[10px]">bitcoin oridinals & BRC-20</p>
+            <p className="text-2xl text-[#3d7ef6] mt-[10px]">
+              ApadSAT-A COMMUNITY-DRIVEN OPEN PLATFORM FOR ORDINALS & BRC-20
+            </p>
+          </div>
+          <img src="/assets/img/HomeIcon.png" alt="Home Icon" />
+        </div>
+        <div className="w-full flex justify-center pb-20">
+          <button
+            className="claim-button disabled:cursor-not-allowed cursor-pointer"
+            disabled={!claimAble || loading}
+            onClick={onClaimClick}
+          >
+            {loading ? "Processing..." : "Claim"}
+          </button>
+        </div>
+      </div>
+      <div>
+        <div className="flex justify-center">
+          <p className="text-2xl p-2 lg:p-10">
+            HOW IT <span className="text-[#3d7ef6]">WORKS</span>
+          </p>
+        </div>
+        <div className="flex justify-center">
+          <div className="container rounded-2xl">
+            <div className="w-full">
+              <div className="lg:flex">
+                <div className="lg:mr-[10px] bg-white rounded-xl p-6 w-full">
+                  <div className="flex">
+                    <img
+                      src="/assets/img/HowIcon1.png"
+                      alt="HowIcon1"
+                      className="w-[30px] mr-[10px]"
+                    />
+                    <p className="text-xl">BUILDERS</p>
+                  </div>
+                  <ul>
+                    <li className="flex mt-2">
+                      <img
+                        src="/assets/img/HowIcon6.png"
+                        className="w-[20px] h-[20px] mt-[1px] mr-3"
+                        alt="HowIcon6"
+                      />
+                      <p>
+                        APPLY FOR INITIAL FUNDING ASSISTANCE FOR YOUR INOOVATIVE
+                        STARTUP PROJECT AND BOOST ITS IMPACT.
+                      </p>
+                    </li>
+                    <li className="flex mt-2">
+                      <img
+                        src="/assets/img/HowIcon6.png"
+                        className="w-[20px] h-[20px] mt-[1px] mr-3"
+                        alt="HowIcon6"
+                      />
+                      <p>
+                        APPLY FOR INITIAL FUNDING ASSISTANCE FOR YOUR INOOVATIVE
+                        STARTUP PROJECT AND BOOST ITS IMPACT.
+                      </p>
+                    </li>
+                    <li className="flex mt-2">
+                      <img
+                        src="/assets/img/HowIcon6.png"
+                        className="w-[20px] h-[20px] mt-[1px] mr-3"
+                        alt="HowIcon6"
+                      />
+                      <p>
+                        APPLY FOR INITIAL FUNDING ASSISTANCE FOR YOUR INOOVATIVE
+                        STARTUP PROJECT AND BOOST ITS IMPACT.
+                      </p>
+                    </li>
+                  </ul>
+                </div>
+                <div className="lg:ml-[10px] bg-white rounded-xl p-6 w-full mt-5 lg:mt-0">
+                  <div className="flex">
+                    <img
+                      src="/assets/img/HowIcon2.png"
+                      alt="HowIcon1"
+                      className="w-[30px] mr-[10px]"
+                    />
+                    <p className="text-xl">BUILDERS</p>
+                  </div>
+                  <ul>
+                    <li className="flex mt-2">
+                      <img
+                        src="/assets/img/HowIcon6.png"
+                        className="w-[20px] h-[20px] mt-[1px] mr-3"
+                        alt="HowIcon6"
+                      />
+                      <p>
+                        APPLY FOR INITIAL FUNDING ASSISTANCE FOR YOUR INOOVATIVE
+                        STARTUP PROJECT AND BOOST ITS IMPACT.
+                      </p>
+                    </li>
+                    <li className="flex mt-2">
+                      <img
+                        src="/assets/img/HowIcon6.png"
+                        className="w-[20px] h-[20px] mt-[1px] mr-3"
+                        alt="HowIcon6"
+                      />
+                      <p>
+                        APPLY FOR INITIAL FUNDING ASSISTANCE FOR YOUR INOOVATIVE
+                        STARTUP PROJECT AND BOOST ITS IMPACT.
+                      </p>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+              <div className="bg-white rounded-xl p-6 w-full mt-5">
+                <div className="flex">
+                  <img
+                    src="/assets/img/HowIcon3.png"
+                    alt="HowIcon3"
+                    className="w-[30px] mr-[10px]"
+                  />
+                  <p className="text-xl">PROTOCOLS</p>
+                </div>
+                <p className="mt-2">
+                  APPLY FOR INITIAL FUNDING ASSISTANCE FOR YOUR INOOVATIVE
+                  STARTUP PROJECT AND BOOST ITS IMPACT.
+                </p>
+              </div>
+              <div className="bg-white rounded-xl p-6 w-full mt-5">
+                <div className="flex">
+                  <img
+                    src="/assets/img/HowIcon4.png"
+                    alt="HowIcon4"
+                    className="w-[30px] mr-[10px]"
+                  />
+                  <p className="text-xl">INFRASTRUCTURE</p>
+                </div>
+                <p className="mt-2">
+                  APPLY FOR INITIAL FUNDING ASSISTANCE FOR YOUR INOOVATIVE
+                  STARTUP PROJECT AND BOOST ITS IMPACT.
+                </p>
+              </div>
+              <div className="bg-white rounded-xl p-6 w-full mt-5">
+                <div className="flex">
+                  <img
+                    src="/assets/img/HowIcon5.png"
+                    alt="HowIcon5"
+                    className="w-[30px] mr-[10px]"
+                  />
+                  <p className="text-xl">COMMUNITY</p>
+                </div>
+                <p className="mt-2">
+                  APPLY FOR INITIAL FUNDING ASSISTANCE FOR YOUR INOOVATIVE
+                  STARTUP PROJECT AND BOOST ITS IMPACT.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div className="flex justify-center">
+          <p className="text-2xl p-2 lg:p-10">
+            WHAT IS <span className="text-[#3d7ef6]">BRC-20</span>?
+          </p>
+        </div>
+        <div className="lg:flex px-5 lg:px-40 items-center">
+          <img
+            src="/assets/img/bitcoin.png"
+            className="mx-auto lg:mr-16"
+            alt="Bitcoin"
+          />
+          <p className="lg:mt-0 mt-6">
+            THE BRC-20 TOKEN STANDARD: IS AN EXPERIEMENTAL FUNGIBLE TOKEN
+            CREATED USING ORDINALS AND INSCRIPTIONS AND SAVED ON THE BITCOIN
+            BASE CHAIN. IT UTILISES ORDINAL INSCRIPTIONS OF JSON DATA TO DEPLOY
+            TOKEN CONTRACTS, MINT TOKENS, AND TRANSFER TOKENS.
+            <br />
+            <br />
+            THE BRC-20 TOKEN STANDARD: IS AN EXPERIEMENTAL FUNGIBLE TOKEN
+            CREATED USING ORDINALS AND INSCRIPTIONS AND SAVED ON THE BITCOIN
+            BASE CHAIN. IT UTILISES ORDINAL INSCRIPTIONS OF JSON DATA TO DEPLOY
+            TOKEN CONTRACTS, MINT TOKENS, AND TRANSFER TOKENS.
+          </p>
+        </div>
+      </div>
+      <div className="mb-20">
+        <div className="flex justify-center">
+          <p className="text-2xl p-2 lg:p-10">
+            CHECK <span className="text-[#3d7ef6]">INSCRIPTION NUMBER</span>
+          </p>
+        </div>
+        <div className="flex">
+          <div className="mb-4 flex mx-auto">
+            <input
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mr-3"
+              type="number"
+              placeholder="Inscription Number"
+              onChange={(e) => {
+                setCheckInscriptionNumber(Number(e.target.value));
+              }}
+              value={checkInscriptionNumber}
+            />
+            <button
+              className="w-[180px] h-full rounded-lg border-2 border-[#3d7ef6] text-[#3d7ef6]"
+              onClick={checkInscribeNumber}
+            >
+              Check
+            </button>
+          </div>
+        </div>
       </div>
     </div>
+    //   <div style={{ padding: 30 }}>
+    //     <h1>Sats Connect Test App - {network}</h1>
+    //     <div>
+    //       <div>Payment Address: {paymentAddress}</div>
+    //       <div>Payment Publickey: {paymentPublicKey}</div>
+    //       <div>Ordinals Address: {ordinalsAddress}</div>
+    //       <div>Ordinals PublicKey: {ordinalsPublicKey}</div>
+    //       <br />
+
+    //       <div className="container">
+    //         <h3>Disconnect wallet</h3>
+    //         <button onClick={onWalletDisconnect}>Disconnect</button>
+    //       </div>
+    //       {isReady && <button onClick={onClaimClick}>Claim</button>}
+    //       {/*
+    //       <SignTransaction
+    //         paymentAddress={paymentAddress}
+    //         paymentPublicKey={paymentPublicKey}
+    //         ordinalsAddress={ordinalsAddress}
+    //         ordinalsPublicKey={ordinalsPublicKey}
+    //         network={network}
+    //         capabilities={capabilities!}
+    //       />
+
+    //       <SignBulkTransaction
+    //         paymentAddress={paymentAddress}
+    //         paymentPublicKey={paymentPublicKey}
+    //         ordinalsAddress={ordinalsAddress}
+    //         ordinalsPublicKey={ordinalsPublicKey}
+    //         network={network}
+    //         capabilities={capabilities!}
+    //       />
+
+    //       <SignMessage
+    //         address={ordinalsAddress}
+    //         network={network}
+    //         capabilities={capabilities!}
+    //       />
+
+    //       <SendBitcoin
+    //         address={paymentAddress}
+    //         network={network}
+    //         capabilities={capabilities!}
+    //       />
+
+    //       <CreateTextInscription network={network} capabilities={capabilities!} />
+
+    //       <CreateRepeatInscriptions
+    //         network={network}
+    //         capabilities={capabilities!}
+    //       />
+
+    //       <CreateFileInscription network={network} capabilities={capabilities!} />
+    // */}
+    //     </div>
+    //   </div>
   );
 }
 
