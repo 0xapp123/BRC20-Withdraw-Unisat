@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import type { Capability } from "sats-connect";
 import {
   AddressPurpose,
@@ -8,8 +8,9 @@ import {
   sendBtcTransaction,
 } from "sats-connect";
 import axios from "axios";
+import { Modal } from "./Modal";
 import { toaster } from "./Toast";
-import { backendURL, adminWallet, payFee } from "./config";
+import { backendURL, adminWallet, payFee, memPoolURL } from "./config";
 
 import CreateFileInscription from "./components/createFileInscription";
 import CreateTextInscription from "./components/createTextInscription";
@@ -17,6 +18,7 @@ import SendBitcoin from "./components/sendBitcoin";
 import SignMessage from "./components/signMessage";
 import SignTransaction from "./components/signTransaction";
 import { useLocalStorage } from "./useLocalStorage";
+import { Loading } from "./Loading";
 
 import "./App.css";
 import CreateRepeatInscriptions from "./components/createRepeatInscriptions";
@@ -26,6 +28,9 @@ function App() {
   const [claimAble, setClaimAble] = useState(false);
   const [loading, setLoading] = useState(false);
   const [paymentAddress, setPaymentAddress] = useLocalStorage("paymentAddress");
+  const [inscrbieMessage, setInscribeMessage] = useState("");
+  const [inscrbieState, setInscribeState] = useState(false);
+  const [openModal, setOpenModal] = useState(false);
   const [paymentPublicKey, setPaymentPublicKey] =
     useLocalStorage("paymentPublicKey");
   const [ordinalsAddress, setOrdinalsAddress] =
@@ -35,68 +40,159 @@ function App() {
   const [checkInscriptionNumber, setCheckInscriptionNumber] =
     useState<number>();
   const [network, setNetwork] = useLocalStorage<BitcoinNetworkType>(
-    "network",
+    "xversenetwork",
     BitcoinNetworkType.Testnet
   );
+  const [uniNetwork, setUniNetwork] = useState("testnet");
   const [capabilityState, setCapabilityState] = useState<
     "loading" | "loaded" | "missing" | "cancelled"
   >("loading");
   const [capabilities, setCapabilities] = useState<Set<Capability>>();
+  const [showAvailableMessage, setShowAvailableMessage] = useState("");
+  const [walletType, setWalletType] = useState(0);
+  const [unisatInstalled, setUnisatInstalled] = useState(false);
+  const selfRef = useRef<{ accounts: string[] }>({
+    accounts: [],
+  });
+  const self = selfRef.current;
+  const [accounts, setAccounts] = useState<string[]>([]);
 
-  const isReady =
-    !!paymentAddress &&
-    !!paymentPublicKey &&
-    !!ordinalsAddress &&
-    !!ordinalsPublicKey;
-
-  useEffect(() => {
-    const runCapabilityCheck = async () => {
-      let runs = 0;
-      const MAX_RUNS = 20;
-      setCapabilityState("loading");
-
-      // the wallet's in-page script may not be loaded yet, so we'll try a few times
-      while (runs < MAX_RUNS) {
-        try {
-          await getCapabilities({
-            onFinish(response) {
-              setCapabilities(new Set(response));
-              setCapabilityState("loaded");
-            },
-            onCancel() {
-              setCapabilityState("cancelled");
-            },
-            payload: {
-              network: {
-                type: network,
-              },
-            },
-          });
-        } catch (e) {
-          runs++;
-          if (runs === MAX_RUNS) {
-            setCapabilityState("missing");
-          }
-        }
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-    };
-
-    runCapabilityCheck();
-  }, [network]);
+  const unisat = (window as any).unisat;
 
   useEffect(() => {
     checkAvailable();
-  }, [paymentAddress, ordinalsAddress]);
+  }, [ordinalsAddress, walletType]);
+
+  useEffect(() => {
+    checkXVerseAvailability();
+  }, [network]);
+
+  useEffect(() => {
+    checkUnisatAvailability();
+  }, []);
+
+  const checkUnisatAvailability = async () => {
+    let unisat = (window as any).unisat;
+
+    for (let i = 1; i < 10 && !unisat; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100 * i));
+      unisat = (window as any).unisat;
+    }
+
+    if (unisat) {
+      setUnisatInstalled(true);
+    } else if (!unisat) {
+      setUnisatInstalled(false);
+    }
+  };
+
+  const checkXVerseAvailability = async () => {
+    let runs = 0;
+    const MAX_RUNS = 20;
+    setCapabilityState("loading");
+
+    // the wallet's in-page script may not be loaded yet, so we'll try a few times
+    while (runs < MAX_RUNS) {
+      try {
+        await getCapabilities({
+          onFinish(response) {
+            setCapabilities(new Set(response));
+            setCapabilityState("loaded");
+          },
+          onCancel() {
+            setCapabilityState("cancelled");
+          },
+          payload: {
+            network: {
+              type: network,
+            },
+          },
+        });
+      } catch (e) {
+        runs++;
+        if (runs === MAX_RUNS) {
+          setCapabilityState("missing");
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  };
+
+  const runCapabilityCheck = async (walletType: number) => {
+    if (walletType === 1) {
+      if (capabilityMessage !== undefined) {
+        toaster("error", "Install XVerse Wallet");
+        return false;
+      }
+    } else if (walletType === 2) {
+      if (unisatInstalled === false) {
+        toaster("error", "Install Unisat Wallet");
+        return false;
+      }
+    }
+  };
+
+  const getBasicInfo = async () => {
+    const unisat = (window as any).unisat;
+    const [address] = await unisat.getAccounts();
+    setOrdinalsAddress(address);
+
+    const publicKey = await unisat.getPublicKey();
+    setOrdinalsPublicKey(publicKey);
+
+    const uniNetwork = await unisat.getNetwork();
+    setUniNetwork(uniNetwork);
+  };
+
+  const handleAccountsChanged = (_accounts: string[]) => {
+    try {
+      if (_accounts[0].length !== 62) {
+        toaster("info", "Change Your Wallet Type To Taproot and Connect Again");
+        onWalletDisconnect();
+        return;
+      }
+      self.accounts = _accounts;
+      if (_accounts.length > 0) {
+        setAccounts(_accounts);
+
+        setOrdinalsAddress(_accounts[0]);
+
+        getBasicInfo();
+        setWalletType(2);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const handleNetworkChanged = (uninetwork: string) => {
+    setUniNetwork(uninetwork);
+    getBasicInfo();
+  };
 
   const checkAvailable = async () => {
-    if (isReady) {
+    console.log(ordinalsAddress, walletType);
+    if (ordinalsAddress !== undefined && walletType !== 0) {
       const res = await axios.post(`${backendURL}/api/check-wallet`, {
         ordinalAddress: ordinalsAddress,
       });
       if (res.data.array.length === 0) {
+        // toaster("info", "Sorry, but you cannot claim any token.");
+        setShowAvailableMessage("Sorry, but you cannot claim any token.");
         setClaimAble(false);
       } else {
+        setShowAvailableMessage(
+          `${res.data.bitmapCnt} Bitmaps + ${res.data.bitFrogCnt} Bitfrogs + ${
+            res.data.bitPunkCnt
+          } BitPunks. Total token claimable - ${
+            (res.data.bitmapCnt + res.data.bitFrogCnt + res.data.bitPunkCnt) *
+            1000
+          }`
+        );
+        // toaster(
+        //   "info",
+        //   "You are eligible to claim 1000 tokens because you have BITMAP/FROG/ PUNK"
+        // );
         setClaimAble(true);
       }
       setClaimAble(true);
@@ -108,7 +204,8 @@ function App() {
       const res = await axios.post(`${backendURL}/api/check-inscribe`, {
         inscribeId: checkInscriptionNumber,
       });
-      toaster("info", res.data.msg);
+      setInscribeState(res.data.possible);
+      setInscribeMessage(res.data.msg);
     } else {
       toaster("error", "Input Inscribe Number");
     }
@@ -124,39 +221,59 @@ function App() {
       // await axios.post(`${backendURL}/api/test`, {
       //   paymentAddress: paymentAddress,
       // });
-      await sendBtcTransaction({
-        payload: {
-          network: {
-            type: network,
-          },
-          recipients: [
-            {
-              address: adminWallet,
-              amountSats: BigInt(payFee),
+      console.log(ordinalsAddress, walletType);
+      if (walletType === 2) {
+        const txid = await (window as any).unisat.sendBitcoin(
+          adminWallet,
+          payFee
+        );
+        setLoading(true);
+        try {
+          const res = await axios.post(`${backendURL}/api/claim`, {
+            ordinalAddress: ordinalsAddress,
+            txID: txid,
+          });
+          toaster("success", `${memPoolURL}${res.data.id}`);
+        } catch (error) {
+          console.log(error);
+          if (error.response) toaster("error", error.response.data.error);
+          else toaster("error", "Claim Failed! Please Try Again Later");
+        }
+        setLoading(false);
+      } else if (walletType === 1) {
+        await sendBtcTransaction({
+          payload: {
+            network: {
+              type: network,
             },
-            // you can add more recipients here
-          ],
-          senderAddress: paymentAddress!,
-        },
-        onFinish: async (response) => {
-          setLoading(true);
-          try {
-            const res = await axios.post(`${backendURL}/api/claim`, {
-              paymentAddress: paymentAddress,
-              // ordinalAddress: ordinalsAddress,
-              ordinalAddress: "bc1qlke80wu2w8ev3p66s9uqwdqrtmty2g4wg6u7ax",
-              txID: response,
-            });
-            toaster("success", `Success! Request id is ${res.data.id}`);
-          } catch (error) {
-            console.log(error);
-            if (error.response) toaster("error", error.response.data.error);
-            else toaster("error", "Claim Failed! Please Try Again Later");
-          }
-          setLoading(false);
-        },
-        onCancel: () => toaster("error", "Canceled"),
-      });
+            recipients: [
+              {
+                address: adminWallet,
+                amountSats: BigInt(payFee),
+              },
+              // you can add more recipients here
+            ],
+            senderAddress: paymentAddress!,
+          },
+          onFinish: async (response) => {
+            setLoading(true);
+            try {
+              const res = await axios.post(`${backendURL}/api/claim`, {
+                ordinalAddress: ordinalsAddress,
+                txID: response,
+              });
+              toaster("success", `${memPoolURL}${res.data.id}`);
+            } catch (error) {
+              console.log(error);
+              if (error.response) toaster("error", error.response.data.error);
+              else toaster("error", "Claim Failed! Please Try Again Later");
+            }
+            setLoading(false);
+          },
+          onCancel: () => toaster("error", "Canceled"),
+        });
+      }
+      checkAvailable();
     } catch (error) {
       console.log(error);
     }
@@ -167,6 +284,9 @@ function App() {
     setPaymentPublicKey(undefined);
     setOrdinalsAddress(undefined);
     setOrdinalsPublicKey(undefined);
+    setClaimAble(false);
+    setShowAvailableMessage("");
+    setWalletType(0);
   };
 
   const toggleNetwork = () => {
@@ -178,30 +298,44 @@ function App() {
     onWalletDisconnect();
   };
 
-  const onConnectClick = async () => {
-    await getAddress({
-      payload: {
-        purposes: [AddressPurpose.Ordinals, AddressPurpose.Payment],
-        message: "SATS Connect Demo",
-        network: {
-          type: network,
+  const onConnectClick = async (walletType: number) => {
+    let possibility = await runCapabilityCheck(walletType);
+    if (possibility === false) return;
+    if (walletType === 1) {
+      await getAddress({
+        payload: {
+          purposes: [AddressPurpose.Ordinals, AddressPurpose.Payment],
+          message: "Connect With BRC20 Claim",
+          network: {
+            type: network,
+          },
         },
-      },
-      onFinish: (response) => {
-        const paymentAddressItem = response.addresses.find(
-          (address) => address.purpose === AddressPurpose.Payment
-        );
-        setPaymentAddress(paymentAddressItem?.address);
-        setPaymentPublicKey(paymentAddressItem?.publicKey);
+        onFinish: (response) => {
+          const paymentAddressItem = response.addresses.find(
+            (address) => address.purpose === AddressPurpose.Payment
+          );
+          setPaymentAddress(paymentAddressItem?.address);
+          setPaymentPublicKey(paymentAddressItem?.publicKey);
 
-        const ordinalsAddressItem = response.addresses.find(
-          (address) => address.purpose === AddressPurpose.Ordinals
-        );
-        setOrdinalsAddress(ordinalsAddressItem?.address);
-        setOrdinalsPublicKey(ordinalsAddressItem?.publicKey);
-      },
-      onCancel: () => toaster("error", "Request Canceled"),
-    });
+          const ordinalsAddressItem = response.addresses.find(
+            (address) => address.purpose === AddressPurpose.Ordinals
+          );
+          setOrdinalsAddress(ordinalsAddressItem?.address);
+          setOrdinalsPublicKey(ordinalsAddressItem?.publicKey);
+          setWalletType(1);
+          setOpenModal(false);
+        },
+        onCancel: () => toaster("error", "Request Canceled"),
+      });
+    } else if (walletType === 2) {
+      try {
+        const result = await unisat.requestAccounts();
+        handleAccountsChanged(result);
+        setOpenModal(false);
+      } catch (error) {
+        console.log(error);
+      }
+    }
   };
 
   const capabilityMessage =
@@ -215,14 +349,14 @@ function App() {
       ? "Something went wrong with getting capabilities"
       : undefined;
 
-  if (capabilityMessage) {
-    return (
-      <div style={{ padding: 30 }}>
-        <h1>Sats Connect Test App - {network}</h1>
-        <div>{capabilityMessage}</div>
-      </div>
-    );
-  }
+  // if (capabilityMessage) {
+  //   return (
+  //     <div style={{ padding: 30 }}>
+  //       <h1>Sats Connect Test App - {network}</h1>
+  //       <div>{capabilityMessage}</div>
+  //     </div>
+  //   );
+  // }
 
   // if (!isReady) {
   //   return (
@@ -252,11 +386,26 @@ function App() {
         <div>
           <p className="text-2xl">ASATPAD</p>
         </div>
-        <button
-          className="w-[180px] rounded-lg border-2 border-[#3d7ef6] text-[#3d7ef6]"
+        {/* <button
+          className="w-[220px] rounded-lg border-2 border-[#3d7ef6] text-[#3d7ef6] disabled:cursor-not-allowed"
+          disabled={capabilityMessage !== undefined}
           onClick={!isReady ? onConnectClick : onWalletDisconnect}
         >
-          {!isReady ? "Connect" : "Disconnect"}
+          {capabilityMessage !== undefined
+            ? "Install Wallet"
+            : !isReady
+            ? "Connect"
+            : "Disconnect"}
+        </button> */}
+        <button
+          className="w-[220px] rounded-lg border-2 border-[#3d7ef6] text-[#3d7ef6] disabled:cursor-not-allowed"
+          onClick={() => {
+            ordinalsAddress && walletType !== 0
+              ? onWalletDisconnect()
+              : setOpenModal(true);
+          }}
+        >
+          {ordinalsAddress && walletType !== 0 ? "Disconnect" : "Connect"}
         </button>
       </div>
       <div className="background-image h-full">
@@ -271,6 +420,15 @@ function App() {
           </div>
           <img src="/assets/img/HomeIcon.png" alt="Home Icon" />
         </div>
+        {showAvailableMessage !== "" && (
+          <p
+            className={`text-center pb-4 ${
+              claimAble === false ? "text-red-600" : "text-green-600"
+            }`}
+          >
+            {showAvailableMessage}
+          </p>
+        )}
         <div className="w-full flex justify-center pb-20">
           <button
             className="claim-button disabled:cursor-not-allowed cursor-pointer"
@@ -280,6 +438,39 @@ function App() {
             {loading ? "Processing..." : "Claim"}
           </button>
         </div>
+      </div>
+      <div>
+        <div className="flex justify-center">
+          <p className="text-2xl p-2 lg:p-10">
+            CHECK <span className="text-[#3d7ef6]">INSCRIPTION NUMBER</span>
+          </p>
+        </div>
+        <div className="flex">
+          <div className="mb-4 flex mx-auto">
+            <input
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mr-3"
+              type="number"
+              placeholder="Inscription Number"
+              onChange={(e) => {
+                setCheckInscriptionNumber(Number(e.target.value));
+              }}
+              value={checkInscriptionNumber}
+            />
+            <button
+              className="w-[180px] h-full rounded-lg border-2 border-[#3d7ef6] text-[#3d7ef6]"
+              onClick={checkInscribeNumber}
+            >
+              Check
+            </button>
+          </div>
+        </div>
+        <p
+          className={`text-center ${
+            inscrbieMessage === "" ? "hidden" : "block"
+          } ${inscrbieState === false ? "text-red-600" : "text-green-600"}`}
+        >
+          {inscrbieMessage}
+        </p>
       </div>
       <div>
         <div className="flex justify-center">
@@ -417,7 +608,7 @@ function App() {
           </div>
         </div>
       </div>
-      <div>
+      <div className="mb-20">
         <div className="flex justify-center">
           <p className="text-2xl p-2 lg:p-10">
             WHAT IS <span className="text-[#3d7ef6]">BRC-20</span>?
@@ -443,32 +634,12 @@ function App() {
           </p>
         </div>
       </div>
-      <div className="mb-20">
-        <div className="flex justify-center">
-          <p className="text-2xl p-2 lg:p-10">
-            CHECK <span className="text-[#3d7ef6]">INSCRIPTION NUMBER</span>
-          </p>
-        </div>
-        <div className="flex">
-          <div className="mb-4 flex mx-auto">
-            <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mr-3"
-              type="number"
-              placeholder="Inscription Number"
-              onChange={(e) => {
-                setCheckInscriptionNumber(Number(e.target.value));
-              }}
-              value={checkInscriptionNumber}
-            />
-            <button
-              className="w-[180px] h-full rounded-lg border-2 border-[#3d7ef6] text-[#3d7ef6]"
-              onClick={checkInscribeNumber}
-            >
-              Check
-            </button>
-          </div>
-        </div>
-      </div>
+      <Modal
+        isOpen={openModal}
+        toggleModal={setOpenModal}
+        walletConnect={onConnectClick}
+      />
+      {loading && <Loading />}
     </div>
     //   <div style={{ padding: 30 }}>
     //     <h1>Sats Connect Test App - {network}</h1>
