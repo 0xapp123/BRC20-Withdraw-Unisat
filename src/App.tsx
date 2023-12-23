@@ -8,6 +8,7 @@ import {
   sendBtcTransaction,
 } from "sats-connect";
 import axios from "axios";
+import { TransactionModel } from "./TransactionModal";
 import { Modal } from "./Modal";
 import { toaster } from "./Toast";
 import { backendURL, adminWallet, payFee, memPoolURL } from "./config";
@@ -41,9 +42,9 @@ function App() {
     useState<number>();
   const [network, setNetwork] = useLocalStorage<BitcoinNetworkType>(
     "xversenetwork",
-    BitcoinNetworkType.Testnet
+    BitcoinNetworkType.Mainnet
   );
-  const [uniNetwork, setUniNetwork] = useState("testnet");
+  const [uniNetwork, setUniNetwork] = useState("mainnet");
   const [capabilityState, setCapabilityState] = useState<
     "loading" | "loaded" | "missing" | "cancelled"
   >("loading");
@@ -56,6 +57,8 @@ function App() {
   });
   const self = selfRef.current;
   const [accounts, setAccounts] = useState<string[]>([]);
+  const [txModelOpen, setTxModelOpen] = useState(false);
+  const [txLink, setTxLink] = useState("");
 
   const unisat = (window as any).unisat;
 
@@ -176,9 +179,28 @@ function App() {
       const res = await axios.post(`${backendURL}/api/check-wallet`, {
         ordinalAddress: ordinalsAddress,
       });
+      console.log(res.data.array);
       if (res.data.array.length === 0) {
         // toaster("info", "Sorry, but you cannot claim any token.");
-        setShowAvailableMessage("Sorry, but you cannot claim any token.");
+        if (
+          res.data.totalBitmapCnt +
+            res.data.totalFrogCnt +
+            res.data.totalPunkCnt >
+          0
+        )
+          setShowAvailableMessage(
+            `Sorry, You already claimed ${
+              (res.data.totalBitmapCnt +
+                res.data.totalFrogCnt +
+                res.data.totalPunkCnt) *
+              1000
+            } tokens for ${res.data.totalBitmapCnt} Bitmaps, ${
+              res.data.totalFrogCnt
+            } Bitfrogs and ${
+              res.data.totalPunkCnt
+            } BitPunks so can not claim any more.`
+          );
+        else setShowAvailableMessage("Sorry, but you cannot claim any token.");
         setClaimAble(false);
       } else {
         setShowAvailableMessage(
@@ -195,7 +217,7 @@ function App() {
         // );
         setClaimAble(true);
       }
-      setClaimAble(true);
+      // setClaimAble(true);
     }
   };
 
@@ -233,7 +255,9 @@ function App() {
             ordinalAddress: ordinalsAddress,
             txID: txid,
           });
-          toaster("success", `${memPoolURL}${res.data.id}`);
+          setTxModelOpen(true);
+          setTxLink(memPoolURL + res.data.id);
+          // toaster("success", `${memPoolURL}${res.data.id}`);
         } catch (error) {
           console.log(error);
           if (error.response) toaster("error", error.response.data.error);
@@ -262,7 +286,9 @@ function App() {
                 ordinalAddress: ordinalsAddress,
                 txID: response,
               });
-              toaster("success", `${memPoolURL}${res.data.id}`);
+              setTxModelOpen(true);
+              setTxLink(memPoolURL + res.data.id);
+              // toaster("success", `${memPoolURL}${res.data.id}`);
             } catch (error) {
               console.log(error);
               if (error.response) toaster("error", error.response.data.error);
@@ -420,15 +446,17 @@ function App() {
           </div>
           <img src="/assets/img/HomeIcon.png" alt="Home Icon" />
         </div>
-        {showAvailableMessage !== "" && (
-          <p
-            className={`text-center pb-4 ${
-              claimAble === false ? "text-red-600" : "text-green-600"
-            }`}
-          >
-            {showAvailableMessage}
-          </p>
-        )}
+        <div className="flex justify-center">
+          {showAvailableMessage !== "" && (
+            <p
+              className={`max-w-[80%] text-center pb-4 ${
+                claimAble === false ? "text-red-600" : "text-green-600"
+              }`}
+            >
+              {showAvailableMessage}
+            </p>
+          )}
+        </div>
         <div className="w-full flex justify-center pb-20">
           <button
             className="claim-button disabled:cursor-not-allowed cursor-pointer"
@@ -638,6 +666,11 @@ function App() {
         isOpen={openModal}
         toggleModal={setOpenModal}
         walletConnect={onConnectClick}
+      />
+      <TransactionModel
+        isOpen={txModelOpen}
+        toggleModal={setTxModelOpen}
+        link={txLink}
       />
       {loading && <Loading />}
     </div>
