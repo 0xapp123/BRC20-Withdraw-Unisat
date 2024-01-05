@@ -18,15 +18,61 @@ code {
     monospace;
 }
 
-.background-image {
+/* .background-image {
   background-image: url("./assets/img/homeBanner.jpg");
   background-size: 100% 100%;
+  min-height:700px;
+} */
+
+.bg-sticky
+{
+  /* background-color: #8d8585bf; */
+  background: linear-gradient(to right, #d3d3d3, #696969);
+
+}
+.background-image {
+  /*background-image: url('./assets/img/homeBanner.jpg');*/
+  background-size: cover;
+  background-attachment: fixed; /* Add this */
+
 }
 
+
+.background-image::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url('./assets/img/homeBanner.webp');; /* Use inherit to keep it the same as the parent */
+  background-size: cover;
+  filter: blur(2px);
+  z-index: -1;
+}
+
+
+.bg-brc20{
+  background-image: url('./assets/img/brc-back.png');; /* Use inherit to keep it the same as the parent */
+
+}
+
+.bg-brc20::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url('./assets/img/brc-back.png');; /* Use inherit to keep it the same as the parent */
+  background-size: cover;
+  filter: blur(10px);
+  z-index: -5;
+}
 .claim-button {
   background-image: url("./assets/img/HomeBtn.png");
   background-size: 100% 100%;
-  width: 200px;
+  width: 400px;
   height: 50px;
 }
 
@@ -36,4 +82,87 @@ code {
 
 .Toastify__close-button {
   width: 15px;
+}
+
+.text-shadow {
+  text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.5); /* Dim background */
+}
+
+.modal {
+  background-color: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  min-width: 300px;
+}
+
+.modal button {
+  background-color: #4CAF50; /* Green */
+  border: none;
+  color: white;
+  text-align: center;
+  vertical-align: middle;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 4px 2px;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: space-around;
+  padding-top: 10px;
+}
+.community-icons {
+  display: flex; /* Align children horizontally */
+  justify-content: center; /* Center children in the container */
+  align-items: center; /* Center children vertically */
+}
+
+.community-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center; /* Ensures text is centered */
+  margin:0 auto;
+}
+
+.community-icon {
+  width: 100px; /* Adjust width as needed */
+  height: 100px; /* Adjust height as needed */
+  object-fit: cover; /* Cover will ensure the image covers the entire element */
+  border-radius: 50%; /* This will make the icon round */
+  /* Add a border if desired, adjust width and color as needed */
+  border: 2px solid #ffffff;
+  justify-content: space-evenly; /* Distributes space evenly between items */
+display: flex;
+}
+.community-text {
+  text-align: center;
+  color: white;
+  /* Add any other styles for text */
+}
+
+.text-overlay {
+  text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8); /* Shadow makes text more legible */
+  background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent background */
+  display: block; /* Or block, inline-block, depending on your layout */
+  padding: 5px; /* Add padding to separate text from background */
+  border-radius: 5px; /* Optional: rounds the corners of the background */
+  text-align:center;
 }
