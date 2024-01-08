@@ -66,6 +66,7 @@ function App() {
     "xversenetwork",
     BitcoinNetworkType.Testnet
   );
+  const [showTx, setShowTx] = useState("");
 
   const [uniNetwork, setUniNetwork] = useState("mainnet");
   const [capabilityState, setCapabilityState] = useState<
@@ -280,8 +281,12 @@ function App() {
         let notCompleted = false;
         console.log("init");
         for (const item of JSON.parse(event.data).data) {
-          if (item.status !== 3) {
+          if (item.status !== 4) {
             setActiveStep(item.status + 1);
+            if (item.status === 0) setShowTx(item.txID);
+            else if (item.status === 2) setShowTx(item.inscribeTxID);
+            else if (item.status === 3) setShowTx(item.inscribeTxID);
+            else setShowTx("");
             notCompleted = true;
           }
         }
@@ -293,10 +298,25 @@ function App() {
       ) {
         console.log("inserted");
         setActiveStep(JSON.parse(event.data).data.status + 1);
+        if (JSON.parse(event.data).data.status === 0)
+          setShowTx(JSON.parse(event.data).data.txID);
+        else if (JSON.parse(event.data).data.status === 2)
+          setShowTx(JSON.parse(event.data).data.inscribeTxID);
+        else if (JSON.parse(event.data).data.status === 3)
+          setShowTx(JSON.parse(event.data).data.inscribeTxID);
+        else setShowTx("");
       }
       if (JSON.parse(event.data).type === "update") {
         console.log("updated");
-        setActiveStep(JSON.parse(event.data).data.status + 1);
+        if (JSON.parse(event.data).data.status === 4) setActiveStep(0);
+        else setActiveStep(JSON.parse(event.data).data.status + 1);
+        if (JSON.parse(event.data).data.status === 0)
+          setShowTx(JSON.parse(event.data).data.txID);
+        else if (JSON.parse(event.data).data.status === 2)
+          setShowTx(JSON.parse(event.data).data.inscribeTxID);
+        else if (JSON.parse(event.data).data.status === 3)
+          setShowTx(JSON.parse(event.data).data.inscribeTxID);
+        else setShowTx("");
       }
     });
   };
@@ -999,6 +1019,17 @@ function App() {
                   <div className="text-white">Completed!</div>
                 )}
               </div>
+              {showTx !== "" && (
+                <div className="text-center">
+                  <a
+                    href={`${memPoolURL}${showTx}`}
+                    target="_blank"
+                    className="text-white"
+                  >
+                    TxID : {showTx}
+                  </a>
+                </div>
+              )}
             </div>
           </div>
         </div>
