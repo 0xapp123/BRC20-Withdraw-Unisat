@@ -281,11 +281,11 @@ function App() {
         let notCompleted = false;
         console.log("init");
         for (const item of JSON.parse(event.data).data) {
-          if (item.status !== 4) {
+          if (item.status !== 7) {
             setActiveStep(item.status + 1);
             if (item.status === 0) setShowTx(item.txID);
-            else if (item.status === 2) setShowTx(item.inscribeTxID);
-            else if (item.status === 3) setShowTx(item.inscribeTxID);
+            else if (item.status === 5) setShowTx(item.inscribeTxID);
+            else if (item.status === 6) setShowTx(item.inscribeTxID);
             else setShowTx("");
             notCompleted = true;
           }
@@ -300,21 +300,21 @@ function App() {
         setActiveStep(JSON.parse(event.data).data.status + 1);
         if (JSON.parse(event.data).data.status === 0)
           setShowTx(JSON.parse(event.data).data.txID);
-        else if (JSON.parse(event.data).data.status === 2)
+        else if (JSON.parse(event.data).data.status === 5)
           setShowTx(JSON.parse(event.data).data.inscribeTxID);
-        else if (JSON.parse(event.data).data.status === 3)
+        else if (JSON.parse(event.data).data.status === 6)
           setShowTx(JSON.parse(event.data).data.inscribeTxID);
         else setShowTx("");
       }
       if (JSON.parse(event.data).type === "update") {
         console.log("updated");
-        if (JSON.parse(event.data).data.status === 4) setActiveStep(0);
+        if (JSON.parse(event.data).data.status === 7) setActiveStep(0);
         else setActiveStep(JSON.parse(event.data).data.status + 1);
         if (JSON.parse(event.data).data.status === 0)
           setShowTx(JSON.parse(event.data).data.txID);
-        else if (JSON.parse(event.data).data.status === 2)
+        else if (JSON.parse(event.data).data.status === 5)
           setShowTx(JSON.parse(event.data).data.inscribeTxID);
-        else if (JSON.parse(event.data).data.status === 3)
+        else if (JSON.parse(event.data).data.status === 6)
           setShowTx(JSON.parse(event.data).data.inscribeTxID);
         else setShowTx("");
       }
@@ -323,6 +323,7 @@ function App() {
 
   const checkAvailable = async () => {
     console.log(ordinalsAddress, walletType);
+    setLoading(true);
     if (ordinalsAddress !== undefined && walletType !== 0) {
       const res = await axios.post(`${backendURL}/api/check-wallet`, {
         ordinalAddress: ordinalsAddress,
@@ -385,6 +386,7 @@ function App() {
       }
       // setClaimAble(true);
     }
+    setLoading(false);
   };
 
   const checkInscribeNumber = async () => {
@@ -612,7 +614,7 @@ function App() {
               />
             </a>
 
-            <button
+            {/* <button
               className="w-[110px] rounded-lg border-2 border-[#ffffff] text-[#ffffff] disabled:cursor-not-allowed"
               onClick={() => {
                 if (!ordinalsAddress || walletType === 0) {
@@ -632,7 +634,7 @@ function App() {
               ) : (
                 "Connect"
               )}
-            </button>
+            </button> */}
           </div>
         </div>
       </div>
@@ -706,17 +708,11 @@ function App() {
                 <div className="w-full flex justify-center pb-10">
                   <button
                     className="claim-button disabled:cursor-not-allowed cursor-pointer"
-                    disabled={!claimAble || loading || !ordinalsAddress}
-                    // onClick={handleOpenModal}
                     onClick={() => {
                       setShowClaimPage(1);
                     }}
                   >
-                    {!(ordinalsAddress && walletType !== 0)
-                      ? "Connect wallet to claim"
-                      : loading
-                      ? "Processing..."
-                      : "Claim Free token (FCFS)"}
+                    Claim Token
                   </button>
                 </div>
               </div>
@@ -987,50 +983,77 @@ function App() {
       ) : (
         <div>
           <div className="background-image flex items-center justify-center">
-            <div className="w-full py-4 px-8 mt-28">
-              <Stepper activeStep={activeStep}>
-                <Step className="h-4 w-4" />
-                <Step className="h-4 w-4" />
-                <Step className="h-4 w-4" />
-                <Step className="h-4 w-4" />
-                <Step className="h-4 w-4" />
-              </Stepper>
-              <div className="flex justify-center mt-3">
-                {activeStep === 0 ? (
-                  <div>
-                    <button
-                      className="claim-button disabled:cursor-not-allowed cursor-pointer"
-                      onClick={() => {
-                        handleOpenModal();
-                      }}
+            {!(ordinalsAddress && walletType !== 0) ? (
+              <button
+                className="claim-button disabled:cursor-not-allowed cursor-pointer mt-20"
+                // onClick={handleOpenModal}
+                onClick={() => {
+                  if (!ordinalsAddress || walletType === 0) {
+                    setOpenModal(true);
+                  }
+                }}
+              >
+                {"Connect wallet to claim"}
+              </button>
+            ) : !claimAble ? (
+              <div className="mt-20 text-white">
+                {loading ? "Loading..." : "You Can not Claim Tokens"}
+              </div>
+            ) : (
+              <div className="w-full py-4 px-8 mt-28">
+                <Stepper activeStep={activeStep}>
+                  <Step className="h-4 w-4" />
+                  <Step className="h-4 w-4" />
+                  <Step className="h-4 w-4" />
+                  <Step className="h-4 w-4" />
+                  <Step className="h-4 w-4" />
+                  <Step className="h-4 w-4" />
+                  <Step className="h-4 w-4" />
+                  <Step className="h-4 w-4" />
+                </Stepper>
+                <div className="flex justify-center mt-3">
+                  {activeStep === 0 ? (
+                    <div>
+                      <button
+                        className="claim-button disabled:cursor-not-allowed cursor-pointer"
+                        onClick={() => {
+                          handleOpenModal();
+                        }}
+                      >
+                        Claim Token
+                      </button>
+                    </div>
+                  ) : activeStep === 1 ? (
+                    <div className="text-white">Waiting BTC Deposited...</div>
+                  ) : activeStep === 2 ? (
+                    <div className="text-white">Get Order ID...</div>
+                  ) : activeStep === 3 ? (
+                    <div className="text-white">Get Inscription ID...</div>
+                  ) : activeStep === 4 ? (
+                    <div className="text-white">Get UTXO...</div>
+                  ) : activeStep === 5 ? (
+                    <div className="text-white">Inscribe Inscription...</div>
+                  ) : activeStep === 6 ? (
+                    <div className="text-white">
+                      Sending Token To User Wallet...
+                    </div>
+                  ) : (
+                    <div className="text-white">Completed!</div>
+                  )}
+                </div>
+                {showTx !== "" && (
+                  <div className="text-center">
+                    <a
+                      href={`${memPoolURL}${showTx}`}
+                      target="_blank"
+                      className="text-white"
                     >
-                      Claim Token
-                    </button>
+                      TxID : {showTx}
+                    </a>
                   </div>
-                ) : activeStep === 1 ? (
-                  <div className="text-white">Waiting BTC Deposited...</div>
-                ) : activeStep === 2 ? (
-                  <div className="text-white">Inscribe Token...</div>
-                ) : activeStep === 3 ? (
-                  <div className="text-white">
-                    Sending Token To User Wallet...
-                  </div>
-                ) : (
-                  <div className="text-white">Completed!</div>
                 )}
               </div>
-              {showTx !== "" && (
-                <div className="text-center">
-                  <a
-                    href={`${memPoolURL}${showTx}`}
-                    target="_blank"
-                    className="text-white"
-                  >
-                    TxID : {showTx}
-                  </a>
-                </div>
-              )}
-            </div>
+            )}
           </div>
         </div>
       )}
